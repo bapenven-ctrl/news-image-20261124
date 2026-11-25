@@ -92,7 +92,7 @@ def Y(v):
 
 
 def text(x, y, s, font, fill=INK, anchor="la"):
-    d.text((X(x), Y(y)), s, font=font, fill=fill, anchor=anchor)
+    d.text((x * S, y * S), s, font=font, fill=fill, anchor=anchor)
 
 
 def text_w(s, font):
@@ -102,23 +102,23 @@ def text_w(s, font):
 def fit(s, font, maxw, label):
     """Assert a line fits; fail loudly instead of overflowing silently."""
     w = text_w(s, font)
-    assert w <= maxw, f"OVERFLOW {label}: {w:.1f} > {maxw} :: {s!r}"
+    if w > maxw:
+        raise AssertionError(f"OVERFLOW {label}: {w:.1f} > {maxw} :: {s!r}")
     return w
 
 
 def wrap(s, font, maxw, max_lines, label):
     """Greedy word wrap; asserts the text fits in max_lines."""
     words = s.split()
-    lines, cur = [], ""
-    for w_ in words:
-        t = (cur + " " + w_).strip()
-        if text_w(t, font) <= maxw:
-            cur = t
-        else:
-            lines.append(cur)
-            cur = w_
-    if cur:
-        lines.append(cur)
+    lines = []
+    start = 0
+    while start < len(words):
+        end = start + 1
+        while end < len(words) and \
+                text_w(" ".join(words[start:end + 1]), font) <= maxw:
+            end += 1
+        lines.append(" ".join(words[start:end]))
+        start = end
     assert len(lines) <= max_lines, \
         f"WRAP {label}: {len(lines)} lines > {max_lines} :: {s!r}"
     assert all(text_w(ln, font) <= maxw for ln in lines), \
@@ -144,7 +144,8 @@ def section_header(y, label, right=""):
     text(MX, y, label, SANS_B(13), fill=INK)
     if right:
         text(1024 - MX, y, right, SANS(11), fill=GREY, anchor="ra")
-    line(MX, y + 17, 1024 - MX, y + 17, fill=INK, width=1)
+    rule_y = y + 17
+    line(MX, rule_y, 1024 - MX, rule_y, fill=INK, width=1)
 
 
 # =========================================================
@@ -197,18 +198,22 @@ VERDICTS = [
 ]
 VW, VGAP = 188, 8
 VY0, VY1 = 230, 312
-for i, (place, region, verdict, number, fact) in enumerate(VERDICTS):
-    x0 = MX + i * (VW + VGAP)
+vx = MX
+vi = 0
+for place, region, verdict, number, fact in VERDICTS:
+    x0 = vx
     x1 = x0 + VW
+    vx += VW + VGAP
     rrect(x0, VY0, x1, VY1, fill=WHITE, outline=GREY, width=1)
     rect(x0 + 1, VY0 + 1, x1 - 1, VY0 + 7, fill=REGION[region])
     text(x0 + 10, VY0 + 10, place, SANS_B(10), fill=GREY)
-    fit(verdict, SANS_B(15), VW - 20, f"verdict-{i}")
+    fit(verdict, SANS_B(15), VW - 20, f"verdict-{vi}")
     text(x0 + 10, VY0 + 24, verdict, SANS_B(15), fill=INK)
-    fit(number, SANS_B(24), VW - 20, f"verdict-num-{i}")
+    fit(number, SANS_B(24), VW - 20, f"verdict-num-{vi}")
     text(x0 + 10, VY0 + 42, number, SANS_B(24), fill=RED)
-    fit(fact, SANS(11), VW - 20, f"verdict-fact-{i}")
+    fit(fact, SANS(11), VW - 20, f"verdict-fact-{vi}")
     text(x0 + 10, VY0 + 66, fact, SANS(11), fill=INK)
+    vi += 1
 
 # =========================================================
 # 4. THE DAY IN EIGHT SCENES — two rows of four  (y 318..606)
@@ -232,8 +237,8 @@ def badge2(x0, y0, s, size=22):
 
 def panel2(row, col, story_no, place, region, status, headline, fact, num,
            draw_scene):
-    x0 = MX + col * (PW + PGAP)
-    y0 = 336 + row * (PH + 6)
+    x0 = MX + (PW + PGAP) * col
+    y0 = 336 + (PH + 6) * row
     x1 = x0 + PW
     y1 = y0 + PH
     rrect(x0, y0, x1, y1, fill=WHITE, outline=GREY, width=1)
@@ -243,20 +248,21 @@ def panel2(row, col, story_no, place, region, status, headline, fact, num,
     d.ellipse([X(x0 + 6), Y(y0 + 6), X(x0 + 26), Y(y0 + 26)],
               fill=REGION[region])
     text(x0 + 16, y0 + 9, str(story_no), SANS_B(11), fill=WHITE, anchor="ma")
-    hy = y0 + SCENE_H + 6
+    hy = y0 + 6 + SCENE_H
     lines = wrap(headline, SANS_B(14), PW - 16, 2, f"scene-head-{story_no}")
-    for j, ln in enumerate(lines):
-        text(x0 + 8, hy + j * 14, ln, SANS_B(14), fill=INK)
-    fy = hy + len(lines) * 14 + 2
+    for j in range(len(lines)):
+        text(x0 + 8, hy + 14 * j, lines[j], SANS_B(14), fill=INK)
+    fy = hy + 2 + len(lines) * 14
     flines = wrap(fact, SANS(12), PW - 16, 2, f"scene-fact-{story_no}")
-    for j, ln in enumerate(flines):
-        text(x0 + 8, fy + j * 12, ln, SANS(12), fill=INK)
+    for j in range(len(flines)):
+        text(x0 + 8, fy + 12 * j, flines[j], SANS(12), fill=INK)
     # chips row at the bottom
-    cy = y1 - 16
+    cy = y0 + PH - 16
     text(x0 + 8, cy, place, SANS_B(10), fill=REGION[region])
     scol = {"CONFIRMED": GREEN, "REPORTED": AMBER, "CLAIM": RED}[status]
     sw = text_w(status, SANS_B(10)) + 12
-    rrect(x1 - 8 - sw, cy - 2, x1 - 8, cy + 12, fill=scol, radius=2)
+    chip_x0 = x1 - 8 - sw
+    rrect(chip_x0, cy - 2, x1 - 8, cy + 12, fill=scol, radius=2)
     text(x1 - 8 - sw / 2, cy, status, SANS_B(10), fill=WHITE, anchor="ma")
 
 
@@ -264,9 +270,10 @@ def scene_courtroom(x0, y0, x1, y1):
     # wood-panelled courtroom: bench, columns, gavel
     rect(x0, y0, x1, y1, fill=(94, 64, 40))
     rect(x0, y0, x1, y0 + 10, fill=(70, 46, 28))
-    for cx in (18, 196):
-        rect(x0 + cx, y0 + 10, x0 + cx + 14, y1, fill=(120, 88, 56))
-        rect(x0 + cx - 3, y0 + 10, x0 + cx + 17, y0 + 16, fill=(140, 104, 66))
+    rect(x0 + 18, y0 + 10, x0 + 32, y1, fill=(120, 88, 56))
+    rect(x0 + 15, y0 + 10, x0 + 35, y0 + 16, fill=(140, 104, 66))
+    rect(x0 + 196, y0 + 10, x0 + 210, y1, fill=(120, 88, 56))
+    rect(x0 + 193, y0 + 10, x0 + 213, y0 + 16, fill=(140, 104, 66))
     # judge bench + gavel
     rect(x0 + 58, y0 + 30, x0 + 178, y1, fill=(52, 34, 20))
     rect(x0 + 58, y0 + 30, x0 + 178, y0 + 36, fill=(30, 20, 12))
@@ -295,22 +302,31 @@ def scene_leak(x0, y0, x1, y1):
               outline=RED, width=2 * S)
     text(x0 + 53, y0 + 35, "LEAK", SANS_B(11), fill=RED, anchor="ma")
     # bars climbing to the right
-    for bi, bh in enumerate((10, 18, 26, 38)):
-        bx = x0 + 108 + bi * 30
-        rect(bx, y1 - 8 - bh, bx + 20, y1 - 8, fill=RED if bi == 3 else NAVY)
+    rect(x0 + 108, y1 - 18, x0 + 128, y1 - 8, fill=NAVY)
+    rect(x0 + 138, y1 - 26, x0 + 158, y1 - 8, fill=NAVY)
+    rect(x0 + 168, y1 - 34, x0 + 188, y1 - 8, fill=NAVY)
+    rect(x0 + 198, y1 - 46, x0 + 218, y1 - 8, fill=RED)
 
 
 def scene_hormuz(x0, y0, x1, y1):
     # night strait: dark sky, darker sea, tanker under a missile arc
     rect(x0, y0, x1, y0 + 24, fill=NAVY)
     rect(x0, y0 + 24, x1, y1, fill=SEA2)
-    for sx, sy in [(22, 8), (96, 12), (170, 6), (208, 14), (60, 18)]:
-        d.ellipse([X(x0 + sx), Y(y0 + sy), X(x0 + sx + 3), Y(y0 + sy + 3)], fill=WHITE)
+    d.ellipse([X(x0 + 22), Y(y0 + 8), X(x0 + 25), Y(y0 + 11)], fill=WHITE)
+    d.ellipse([X(x0 + 96), Y(y0 + 12), X(x0 + 99), Y(y0 + 15)], fill=WHITE)
+    d.ellipse([X(x0 + 170), Y(y0 + 6), X(x0 + 173), Y(y0 + 9)], fill=WHITE)
+    d.ellipse([X(x0 + 208), Y(y0 + 14), X(x0 + 211), Y(y0 + 17)], fill=WHITE)
+    d.ellipse([X(x0 + 60), Y(y0 + 18), X(x0 + 63), Y(y0 + 21)], fill=WHITE)
     # dotted missile arc diving onto the tanker
-    for t in range(0, 9):
-        px = x0 + 30 + t * 16
-        py = y0 + 40 - int(26 * (1 - ((t - 4) / 4.0) ** 2))
-        d.ellipse([X(px), Y(py), X(px + 4), Y(py + 4)], fill=WHITE)
+    d.ellipse([X(x0 + 30), Y(y0 + 40), X(x0 + 34), Y(y0 + 44)], fill=WHITE)
+    d.ellipse([X(x0 + 46), Y(y0 + 29), X(x0 + 50), Y(y0 + 33)], fill=WHITE)
+    d.ellipse([X(x0 + 62), Y(y0 + 21), X(x0 + 66), Y(y0 + 25)], fill=WHITE)
+    d.ellipse([X(x0 + 78), Y(y0 + 16), X(x0 + 82), Y(y0 + 20)], fill=WHITE)
+    d.ellipse([X(x0 + 94), Y(y0 + 14), X(x0 + 98), Y(y0 + 18)], fill=WHITE)
+    d.ellipse([X(x0 + 110), Y(y0 + 16), X(x0 + 114), Y(y0 + 20)], fill=WHITE)
+    d.ellipse([X(x0 + 126), Y(y0 + 21), X(x0 + 130), Y(y0 + 25)], fill=WHITE)
+    d.ellipse([X(x0 + 142), Y(y0 + 29), X(x0 + 146), Y(y0 + 33)], fill=WHITE)
+    d.ellipse([X(x0 + 158), Y(y0 + 40), X(x0 + 162), Y(y0 + 44)], fill=WHITE)
     # tanker hull + bridge, low in the water
     rect(x0 + 52, y0 + 40, x0 + 188, y0 + 50, fill=(24, 30, 38))
     rect(x0 + 150, y0 + 32, x0 + 176, y0 + 40, fill=(40, 46, 56))
@@ -331,13 +347,18 @@ def scene_tower(x0, y0, x1, y1):
     d.ellipse([X(x0 + 170), Y(y0 + 4), X(x0 + 196), Y(y0 + 30)], fill=(240, 196, 110))
     rect(x0, y0 + 34, x1, y1, fill=(40, 44, 60))
     # low blocks
-    for bx, bw, bh in [(8, 34, 12), (48, 26, 18), (180, 30, 14), (214, 16, 10)]:
-        rect(x0 + bx, y1 - bh, x0 + bx + bw, y1, fill=(24, 28, 40))
+    rect(x0 + 8, y1 - 12, x0 + 42, y1, fill=(24, 28, 40))
+    rect(x0 + 48, y1 - 18, x0 + 74, y1, fill=(24, 28, 40))
+    rect(x0 + 180, y1 - 14, x0 + 210, y1, fill=(24, 28, 40))
+    rect(x0 + 214, y1 - 10, x0 + 230, y1, fill=(24, 28, 40))
     # the tower: tapering shaft + crown
     d.polygon([(X(x0 + 104), Y(y1)), (X(x0 + 112), Y(y0 + 6)),
                (X(x0 + 124), Y(y0 + 6)), (X(x0 + 132), Y(y1))], fill=(16, 24, 48))
-    for wy in range(y0 + 14, y1 - 4, 8):
-        line(x0 + 110, wy, x0 + 126, wy, fill=(240, 196, 110), width=1)
+    line(x0 + 110, y0 + 14, x0 + 126, y0 + 14, fill=(240, 196, 110), width=1)
+    line(x0 + 110, y0 + 22, x0 + 126, y0 + 22, fill=(240, 196, 110), width=1)
+    line(x0 + 110, y0 + 30, x0 + 126, y0 + 30, fill=(240, 196, 110), width=1)
+    line(x0 + 110, y0 + 38, x0 + 126, y0 + 38, fill=(240, 196, 110), width=1)
+    line(x0 + 110, y0 + 46, x0 + 126, y0 + 46, fill=(240, 196, 110), width=1)
     # blast starburst at the crown
     ex, ey = x0 + 118, y0 + 10
     for ang in range(0, 360, 30):
@@ -354,14 +375,18 @@ def scene_chart(x0, y0, x1, y1):
     line(x0 + 10, y0 + 8, x0 + 10, y1 - 8, fill=GREY, width=1)
     line(x0 + 10, y1 - 8, x1 - 8, y1 - 8, fill=GREY, width=1)
     # bars, tall to short
-    for bi, bh in enumerate((34, 30, 24, 16, 10)):
-        bx = x0 + 20 + bi * 36
-        rect(bx, y1 - 8 - bh, bx + 22, y1 - 8, fill=(176, 34, 34) if bi >= 3 else NAVY)
+    rect(x0 + 20, y1 - 42, x0 + 42, y1 - 8, fill=NAVY)
+    rect(x0 + 56, y1 - 38, x0 + 78, y1 - 8, fill=NAVY)
+    rect(x0 + 92, y1 - 32, x0 + 114, y1 - 8, fill=NAVY)
+    rect(x0 + 128, y1 - 24, x0 + 150, y1 - 8, fill=(176, 34, 34))
+    rect(x0 + 164, y1 - 18, x0 + 186, y1 - 8, fill=(176, 34, 34))
     # falling red line across the bars
     pts = [(x0 + 20, y0 + 12), (x0 + 70, y0 + 20), (x0 + 120, y0 + 30),
            (x0 + 170, y0 + 42), (x0 + 214, y0 + 50)]
-    for a, b in zip(pts, pts[1:]):
-        line(a[0], a[1], b[0], b[1], fill=RED, width=3)
+    line(x0 + 20, y0 + 12, x0 + 70, y0 + 20, fill=RED, width=3)
+    line(x0 + 70, y0 + 20, x0 + 120, y0 + 30, fill=RED, width=3)
+    line(x0 + 120, y0 + 30, x0 + 170, y0 + 42, fill=RED, width=3)
+    line(x0 + 170, y0 + 42, x0 + 214, y0 + 50, fill=RED, width=3)
     # arrowhead at the end
     d.polygon([(X(x0 + 214), Y(y0 + 50)), (X(x0 + 204), Y(y0 + 44)),
                (X(x0 + 206), Y(y0 + 52))], fill=RED)
@@ -371,19 +396,32 @@ def scene_drones(x0, y0, x1, y1):
     # night sky, drone swarm dots, two impact flashes over a city
     rect(x0, y0, x1, y0 + 38, fill=NAVY)
     rect(x0, y0 + 38, x1, y1, fill=(30, 30, 40))
-    for sx, sy in [(20, 8), (70, 14), (130, 6), (180, 12), (210, 20), (100, 22)]:
-        d.ellipse([X(x0 + sx), Y(y0 + sy), X(x0 + sx + 3), Y(y0 + sy + 3)], fill=WHITE)
+    d.ellipse([X(x0 + 20), Y(y0 + 8), X(x0 + 23), Y(y0 + 11)], fill=WHITE)
+    d.ellipse([X(x0 + 70), Y(y0 + 14), X(x0 + 73), Y(y0 + 17)], fill=WHITE)
+    d.ellipse([X(x0 + 130), Y(y0 + 6), X(x0 + 133), Y(y0 + 9)], fill=WHITE)
+    d.ellipse([X(x0 + 180), Y(y0 + 12), X(x0 + 183), Y(y0 + 15)], fill=WHITE)
+    d.ellipse([X(x0 + 210), Y(y0 + 20), X(x0 + 213), Y(y0 + 23)], fill=WHITE)
+    d.ellipse([X(x0 + 100), Y(y0 + 22), X(x0 + 103), Y(y0 + 25)], fill=WHITE)
     # drone crosses
-    for dx, dy in [(44, 12), (96, 20), (150, 10), (196, 24)]:
-        line(x0 + dx - 4, y0 + dy, x0 + dx + 4, y0 + dy, fill=(205, 205, 215), width=2)
-        line(x0 + dx, y0 + dy - 4, x0 + dx, y0 + dy + 4, fill=(205, 205, 215), width=2)
+    line(x0 + 40, y0 + 12, x0 + 48, y0 + 12, fill=(205, 205, 215), width=2)
+    line(x0 + 44, y0 + 8, x0 + 44, y0 + 16, fill=(205, 205, 215), width=2)
+    line(x0 + 92, y0 + 20, x0 + 100, y0 + 20, fill=(205, 205, 215), width=2)
+    line(x0 + 96, y0 + 16, x0 + 96, y0 + 24, fill=(205, 205, 215), width=2)
+    line(x0 + 146, y0 + 10, x0 + 154, y0 + 10, fill=(205, 205, 215), width=2)
+    line(x0 + 150, y0 + 6, x0 + 150, y0 + 14, fill=(205, 205, 215), width=2)
+    line(x0 + 192, y0 + 24, x0 + 200, y0 + 24, fill=(205, 205, 215), width=2)
+    line(x0 + 196, y0 + 20, x0 + 196, y0 + 28, fill=(205, 205, 215), width=2)
     # dotted trails
-    for tx in range(0, 5):
-        d.ellipse([X(x0 + 30 + tx * 8), Y(y0 + 30), X(x0 + 34 + tx * 8), Y(y0 + 34)],
-                  fill=(150, 150, 160))
+    d.ellipse([X(x0 + 30), Y(y0 + 30), X(x0 + 34), Y(y0 + 34)], fill=(150, 150, 160))
+    d.ellipse([X(x0 + 38), Y(y0 + 30), X(x0 + 42), Y(y0 + 34)], fill=(150, 150, 160))
+    d.ellipse([X(x0 + 46), Y(y0 + 30), X(x0 + 50), Y(y0 + 34)], fill=(150, 150, 160))
+    d.ellipse([X(x0 + 54), Y(y0 + 30), X(x0 + 58), Y(y0 + 34)], fill=(150, 150, 160))
+    d.ellipse([X(x0 + 62), Y(y0 + 30), X(x0 + 66), Y(y0 + 34)], fill=(150, 150, 160))
     # city blocks + two impact flashes
-    for bx, bw, bh in [(10, 40, 10), (60, 30, 14), (150, 36, 12), (196, 30, 9)]:
-        rect(x0 + bx, y1 - bh, x0 + bx + bw, y1, fill=(16, 18, 26))
+    rect(x0 + 10, y1 - 10, x0 + 50, y1, fill=(16, 18, 26))
+    rect(x0 + 60, y1 - 14, x0 + 90, y1, fill=(16, 18, 26))
+    rect(x0 + 150, y1 - 12, x0 + 186, y1, fill=(16, 18, 26))
+    rect(x0 + 196, y1 - 9, x0 + 226, y1, fill=(16, 18, 26))
     for ix in (75, 168):
         d.polygon([(X(x0 + ix), Y(y1 - 14)), (X(x0 + ix + 5), Y(y1 - 26)),
                    (X(x0 + ix + 10), Y(y1 - 14))], fill=ORANGE)
@@ -393,16 +431,22 @@ def scene_poland(x0, y0, x1, y1):
     # night border: radar sweep, one drone crossing, jet overhead
     rect(x0, y0, x1, y0 + 36, fill=NAVY)
     rect(x0, y0 + 36, x1, y1, fill=(34, 44, 34))
-    for sx, sy in [(20, 8), (80, 14), (150, 6), (200, 16), (120, 22)]:
-        d.ellipse([X(x0 + sx), Y(y0 + sy), X(x0 + sx + 3), Y(y0 + sy + 3)], fill=WHITE)
+    d.ellipse([X(x0 + 20), Y(y0 + 8), X(x0 + 23), Y(y0 + 11)], fill=WHITE)
+    d.ellipse([X(x0 + 80), Y(y0 + 14), X(x0 + 83), Y(y0 + 17)], fill=WHITE)
+    d.ellipse([X(x0 + 150), Y(y0 + 6), X(x0 + 153), Y(y0 + 9)], fill=WHITE)
+    d.ellipse([X(x0 + 200), Y(y0 + 16), X(x0 + 203), Y(y0 + 19)], fill=WHITE)
+    d.ellipse([X(x0 + 120), Y(y0 + 22), X(x0 + 123), Y(y0 + 25)], fill=WHITE)
     # radar dish + sweep
     line(x0 + 30, y1 - 8, x0 + 30, y0 + 26, fill=(90, 120, 150), width=3)
     d.ellipse([X(x0 + 18), Y(y0 + 20), X(x0 + 42), Y(y0 + 32)], fill=(90, 120, 150))
     line(x0 + 30, y0 + 26, x0 + 90, y0 + 12, fill=GREEN, width=2)
     # the intruding drone, dotted trail behind it
-    for t in range(0, 6):
-        d.ellipse([X(x0 + 96 + t * 8), Y(y0 + 14), X(x0 + 100 + t * 8), Y(y0 + 18)],
-                  fill=(205, 205, 215))
+    d.ellipse([X(x0 + 96), Y(y0 + 14), X(x0 + 100), Y(y0 + 18)], fill=(205, 205, 215))
+    d.ellipse([X(x0 + 104), Y(y0 + 14), X(x0 + 108), Y(y0 + 18)], fill=(205, 205, 215))
+    d.ellipse([X(x0 + 112), Y(y0 + 14), X(x0 + 116), Y(y0 + 18)], fill=(205, 205, 215))
+    d.ellipse([X(x0 + 120), Y(y0 + 14), X(x0 + 124), Y(y0 + 18)], fill=(205, 205, 215))
+    d.ellipse([X(x0 + 128), Y(y0 + 14), X(x0 + 132), Y(y0 + 18)], fill=(205, 205, 215))
+    d.ellipse([X(x0 + 136), Y(y0 + 14), X(x0 + 140), Y(y0 + 18)], fill=(205, 205, 215))
     d.polygon([(X(x0 + 150), Y(y0 + 16)), (X(x0 + 166), Y(y0 + 12)),
                (X(x0 + 166), Y(y0 + 20))], fill=(150, 154, 160))
     # treeline + NATO jet silhouette
@@ -434,9 +478,11 @@ def scene_trophy(x0, y0, x1, y1):
           fill=(240, 196, 60), width=3 * S)
     # ball + confetti
     d.ellipse([X(x0 + 170), Y(y0 + 40), X(x0 + 184), Y(y0 + 52)], fill=WHITE)
-    for cx, cy, cc in [(30, 20, RED), (60, 44, YELLOW), (200, 18, WHITE),
-                       (160, 46, YELLOW), (40, 48, WHITE)]:
-        d.ellipse([X(x0 + cx), Y(y0 + cy), X(x0 + cx + 4), Y(y0 + cy + 4)], fill=cc)
+    d.ellipse([X(x0 + 30), Y(y0 + 20), X(x0 + 34), Y(y0 + 24)], fill=RED)
+    d.ellipse([X(x0 + 60), Y(y0 + 44), X(x0 + 64), Y(y0 + 48)], fill=YELLOW)
+    d.ellipse([X(x0 + 200), Y(y0 + 18), X(x0 + 204), Y(y0 + 22)], fill=WHITE)
+    d.ellipse([X(x0 + 160), Y(y0 + 46), X(x0 + 164), Y(y0 + 50)], fill=YELLOW)
+    d.ellipse([X(x0 + 40), Y(y0 + 48), X(x0 + 44), Y(y0 + 52)], fill=WHITE)
 
 
 panel2(0, 0, 1, "BROOKLYN, US", "AMERICAS", "CONFIRMED",
@@ -485,12 +531,16 @@ MARKETS = [
     ("SANOFI", "$41BN", WHITE),
 ]
 MW = CW // 6
-for i, (label, value, col) in enumerate(MARKETS):
-    cx0 = MX + i * MW
-    fit(label, SANS_B(10), MW - 12, f"mkt-label-{i}")
+mx = MX
+mi = 0
+for label, value, col in MARKETS:
+    cx0 = mx
+    mx += MW
+    fit(label, SANS_B(10), MW - 12, f"mkt-label-{mi}")
     text(cx0 + 6, 613, label, SANS_B(10), fill=GREY)
-    fit(value, SANS_B(16), MW - 12, f"mkt-value-{i}")
+    fit(value, SANS_B(16), MW - 12, f"mkt-value-{mi}")
     text(cx0 + 6, 622, value, SANS_B(16), fill=col)
+    mi += 1
 
 # =========================================================
 # 6. THE REST OF THE DAY — three region columns  (y 644..974)
@@ -576,8 +626,11 @@ COLUMNS = [
 ]
 COLW, CGAP = 317, 12
 CY0, CY1 = 666, 974
-for ci, (chead, stories) in enumerate(COLUMNS):
-    cx0 = MX + ci * (COLW + CGAP)
+colx = MX
+ci = 0
+for chead, stories in COLUMNS:
+    cx0 = colx
+    colx += COLW + CGAP
     cx1 = cx0 + COLW
     # column header: colour bar + title
     rect(cx0, CY0, cx1, CY0 + 4, fill=INK)
@@ -586,11 +639,12 @@ for ci, (chead, stories) in enumerate(COLUMNS):
     line(cx0, CY0 + 24, cx1, CY0 + 24, fill=GREY, width=1)
     n = len(stories)
     row_h = (CY1 - (CY0 + 30)) / n
-    for ri, (no, region, head, summ) in enumerate(stories):
+    for ri in range(n):
+        no, region, head, summ = stories[ri]
         ry = CY0 + 30 + ri * row_h
         # number disc
-        d.ellipse([X(cx0), Y(ry + 1), X(cx0 + 15), Y(ry + 16)],
-                  fill=REGION[region])
+        disc = [X(cx0), Y(ry + 1), X(cx0 + 15), Y(ry + 16)]
+        d.ellipse(disc, fill=REGION[region])
         text(cx0 + 7, ry + 3, str(no), SANS_B(10), fill=WHITE, anchor="ma")
         tx = cx0 + 21
         tw = COLW - 21
@@ -604,6 +658,7 @@ for ci, (chead, stories) in enumerate(COLUMNS):
         if ri < n - 1:
             line(cx0, ry + row_h - 4, cx1, ry + row_h - 4,
                  fill=(214, 210, 198), width=1)
+    ci += 1
 
 # =========================================================
 # 7. FOOTER  (y 978..1024)

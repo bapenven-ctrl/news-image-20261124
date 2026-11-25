@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Place the finished front page where the grader expects it.
+"""Copy the finished front page into the grader's output directory.
 
-The picture is drawn by render.py and stored beside this file as
-entry.png. This runner only copies those exact bytes into the output
-directory the grader names, so both runs write identical bytes and
-the run needs no clock, no network and no chance.
+render.py draws the picture and leaves it beside this file as entry.png.
+This runner only moves those exact bytes, so both grading runs write
+identical bytes. No clock, no network, nothing random.
 """
 
 import os
@@ -12,21 +11,30 @@ import shutil
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-PICTURE = HERE / "entry.png"
+OUTPUT_ENV = "MAKEFUN_OUTPUT_DIR"
+SOURCE_NAME = "entry.png"
 
 
-def main() -> int:
-    out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "out"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / "entry.png"
-    if not PICTURE.is_file():
-        print(f"missing picture: {PICTURE}", file=sys.stderr)
+def picture_path() -> Path:
+    return Path(__file__).resolve().parent / SOURCE_NAME
+
+
+def destination_dir() -> Path:
+    return Path(os.environ.get(OUTPUT_ENV, "out"))
+
+
+def place() -> int:
+    src = picture_path()
+    if not src.is_file():
+        print(f"missing picture: {src}", file=sys.stderr)
         return 1
-    shutil.copyfile(PICTURE, target)
+    out = destination_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    target = out / SOURCE_NAME
+    shutil.copyfile(src, target)
     print(f"placed {target} ({target.stat().st_size} bytes)")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(place())
